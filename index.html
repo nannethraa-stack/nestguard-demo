@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NestGuard Clinical NICU Central Monitoring Station</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .thermal-grid-32x24 { 
+            display: grid; 
+            grid-template-columns: repeat(32, 1fr); 
+            gap: 1px; 
+            background-color: #020617;
+        }
+        .thermal-pixel { 
+            aspect-ratio: 1; 
+            border-radius: 1px; 
+            transition: background-color 0.2s ease; 
+        }
+        @keyframes pulse-wave {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+        .animate-wave { animation: pulse-wave 1.5s infinite ease-in-out; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
+
+    <!-- Hospital Header Bar -->
+    <header class="border-b border-slate-800 bg-slate-900/90 px-6 py-3 flex justify-between items-center sticky top-0 z-50 backdrop-blur">
+        <div class="flex items-center space-x-4">
+            <span class="px-2.5 py-1 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded font-mono text-xs font-bold">NICU WARD A</span>
+            <h1 class="text-lg font-bold tracking-wide text-white">NestGuard IoMT <span class="text-xs text-slate-400 font-normal">| Multi-Sensor Clinical Bed 04 Monitor</span></h1>
+        </div>
+        <div class="flex items-center space-x-6">
+            <span id="connection-status" class="text-xs font-mono px-3 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full">Connecting Central Gateway...</span>
+            <span id="clock" class="text-sm font-mono text-slate-400">00:00:00 UTC</span>
+        </div>
+    </header>
+
+    <!-- Main Clinical Grid Dashboard -->
+    <main class="p-6 max-w-[1600px] mx-auto space-y-6">
+
+        <!-- TOP ROW: HIGH-PRIORITY VITAL SIGN TELEMETRY -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            <!-- Sensor 1: 60GHz mmWave Radar Vitals -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-lg">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-cyan-400 uppercase tracking-wider">60GHz mmWave Radar</span>
+                    <span class="text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-800 px-1.5 py-0.5 rounded">BGT60TR13C</span>
+                </div>
+                <div class="flex justify-between items-baseline mt-1">
+                    <div>
+                        <span class="text-xs text-slate-500 block">Respiration</span>
+                        <span id="resp-rate" class="text-3xl font-extrabold text-cyan-400">--</span>
+                        <span class="text-xs text-slate-400">BPM</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs text-slate-500 block">Movement Index</span>
+                        <span id="movement-idx" class="text-sm font-mono font-bold text-emerald-400">RESTING</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sensor 2: PVDF Piezoelectric BCG Film Array -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-lg">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-rose-400 uppercase tracking-wider">PVDF Piezo Film (BCG)</span>
+                    <span class="text-[10px] font-mono bg-rose-950 text-rose-300 border border-rose-800 px-1.5 py-0.5 rounded">Contactless Pulse</span>
+                </div>
+                <div class="flex justify-between items-baseline mt-1">
+                    <div>
+                        <span class="text-xs text-slate-500 block">Heart Rate</span>
+                        <span id="heart-rate" class="text-3xl font-extrabold text-rose-400">--</span>
+                        <span class="text-xs text-slate-400">BPM</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs text-slate-500 block">Signal Quality</span>
+                        <span id="signal-q" class="text-sm font-mono text-emerald-400 font-bold">98%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sensor 3: Load Cell & 6-Axis IMU Fusion -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-lg">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-purple-400 uppercase tracking-wider">HX711 Load Cell + MPU6050</span>
+                    <span class="text-[10px] font-mono bg-purple-950 text-purple-300 border border-purple-800 px-1.5 py-0.5 rounded">Kinematics</span>
+                </div>
+                <div class="flex justify-between items-baseline mt-1">
+                    <div>
+                        <span class="text-xs text-slate-500 block">Bed Weight</span>
+                        <span id="bed-weight" class="text-2xl font-bold text-purple-300">4.25</span>
+                        <span class="text-xs text-slate-400">kg</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs text-slate-500 block">Cradle Posture</span>
+                        <span id="cradle-posture" class="text-xs font-mono font-bold text-amber-400">SUPINE_BACK</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sensor 4: INMP441 Acoustic Microphone (Edge AI CNN) -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-lg">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-amber-400 uppercase tracking-wider">INMP441 I2S Audio CNN</span>
+                    <span class="text-[10px] font-mono bg-amber-950 text-amber-300 border border-amber-800 px-1.5 py-0.5 rounded">Acoustic AI</span>
+                </div>
+                <div class="flex justify-between items-baseline mt-1">
+                    <div>
+                        <span class="text-xs text-slate-500 block">Cry Classification</span>
+                        <span id="cry-status" class="text-sm font-bold text-emerald-400">QUIET_NORMAL</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs text-slate-500 block">Sound Level</span>
+                        <span id="decibels" class="text-lg font-mono font-bold text-amber-300">42 dB</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- MIDDLE ROW: THERMAL MATRIX, DIFFERENTIAL GAS & ENVIRONMENT -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Sensor 5: MLX90640 Spatial Thermal Array (32x24 Matrix) -->
+            <div class="lg:col-span-2 bg-slate-900/90 border border-slate-800 rounded-xl p-5 shadow-lg">
+                <div class="flex justify-between items-center mb-3">
+                    <div>
+                        <h2 class="text-sm font-bold text-slate-200 uppercase tracking-wider">Melexis MLX90640-D55 Thermal Spatial Matrix</h2>
+                        <span class="text-xs text-slate-500">768 IR Thermal Infrared Zones ($32 \times 24$ Frame Rendering)</span>
+                    </div>
+                    <div class="flex space-x-4 text-xs font-mono">
+                        <div><span class="text-slate-500">Core Body:</span> <span id="core-temp" class="text-rose-400 font-bold">-- °C</span></div>
+                        <div><span class="text-slate-500">Head Zone:</span> <span id="head-temp" class="text-amber-400 font-bold">-- °C</span></div>
+                    </div>
+                </div>
+
+                <!-- 32x24 Grid Container -->
+                <div id="thermal-grid" class="thermal-grid-32x24 p-2 rounded-lg border border-slate-800 mb-3">
+                    <!-- 768 pixels generated dynamically -->
+                </div>
+
+                <div class="flex justify-between items-center text-xs text-slate-400 px-1">
+                    <span>Ambient Background (&lt;26°C)</span>
+                    <div class="h-2 w-48 rounded bg-gradient-to-r from-sky-500 via-amber-400 to-rose-500"></div>
+                    <span>Infant Core Temperature (&gt;36.5°C)</span>
+                </div>
+            </div>
+
+            <!-- Sensor 6 & 7: Dual Gas Array + Incubator Environment -->
+            <div class="space-y-6">
+                
+                <!-- Sensor 6: ScioSense ENS160 Dual Gas Array -->
+                <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-5 shadow-lg space-y-4">
+                    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                        <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Dual ENS160 Gas Array</h3>
+                        <span class="text-[10px] font-mono text-cyan-400">Differential Air Check</span>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-400">Mattress Bed VOC:</span>
+                                <span id="mattress-voc" class="font-mono text-cyan-300">-- ppb</span>
+                            </div>
+                            <div class="w-full bg-slate-950 rounded-full h-2 border border-slate-800">
+                                <div id="mattress-voc-bar" class="bg-cyan-500 h-2 rounded-full" style="width: 30%"></div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-400">Ambient Nursery VOC:</span>
+                                <span id="ambient-voc" class="font-mono text-slate-400">-- ppb</span>
+                            </div>
+                            <div class="w-full bg-slate-950 rounded-full h-2 border border-slate-800">
+                                <div id="ambient-voc-bar" class="bg-slate-600 h-2 rounded-full" style="width: 25%"></div>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between items-center text-xs">
+                            <span class="text-slate-400">Hygiene Differential ($\Delta\text{VOC}$):</span>
+                            <span id="delta-voc" class="font-mono font-bold text-emerald-400">-- ppb</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sensor 7: AHT20 Incubator Climate Control -->
+                <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-5 shadow-lg space-y-3">
+                    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                        <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">AHT20 Incubator Climate</h3>
+                        <span class="text-[10px] font-mono text-emerald-400">$I^2C$ Loop Verified</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 text-center">
+                        <div class="bg-slate-950 p-3 rounded border border-slate-800">
+                            <span class="text-[10px] text-slate-500 block">Air Temp</span>
+                            <span id="inc-temp" class="text-xl font-bold text-slate-200">31.5</span>
+                            <span class="text-xs text-slate-400">°C</span>
+                        </div>
+                        <div class="bg-slate-950 p-3 rounded border border-slate-800">
+                            <span class="text-[10px] text-slate-500 block">Humidity</span>
+                            <span id="inc-hum" class="text-xl font-bold text-slate-200">55.0</span>
+                            <span class="text-xs text-slate-400">% RH</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- BOTTOM ROW: MULTI-MODAL NURSE STATION EVENT LOG -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-5 shadow-lg">
+            <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Live Multi-Sensor Nurse Station Alarm Stream</h2>
+            <div id="alert-feed" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-48 overflow-y-auto pr-1">
+                <div class="text-xs text-slate-500 italic col-span-full">Awaiting real-time telemetry events...</div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Client WebSockets Execution -->
+    <script>
+        // Auto-detect environment protocol (ws:// or wss://)
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}`;
+        const ws = new WebSocket(wsUrl);
+
+        const statusEl = document.getElementById('connection-status');
+
+        // Render 32x24 (768 pixels) Thermal Array
+        const gridEl = document.getElementById('thermal-grid');
+        for (let i = 0; i < 768; i++) {
+            const pixel = document.createElement('div');
+            pixel.className = 'thermal-pixel bg-slate-800';
+            pixel.id = `pix-${i}`;
+            gridEl.appendChild(pixel);
+        }
+
+        ws.onopen = () => {
+            statusEl.innerText = 'Central Gateway Connected';
+            statusEl.className = 'text-xs font-mono px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full';
+        };
+
+        ws.onclose = () => {
+            statusEl.innerText = 'Gateway Disconnected';
+            statusEl.className = 'text-xs font-mono px-3 py-1 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-full';
+        };
+
+        ws.onmessage = (event) => {
+            const packet = JSON.parse(event.data);
+
+            if (packet.topic.includes('/telemetry')) {
+                const s = packet.data.sensors;
+
+                // 1. mmWave Radar
+                if (s.clinicalVitals) {
+                    document.getElementById('resp-rate').innerText = s.clinicalVitals.respirationBpm;
+                    document.getElementById('movement-idx').innerText = s.clinicalVitals.movementIndex;
+                    document.getElementById('heart-rate').innerText = s.clinicalVitals.heartRateBpm;
+                    document.getElementById('signal-q').innerText = s.clinicalVitals.ballistoCardiogramQuality;
+                }
+
+                // 2. Load Cells & IMU
+                if (s.weightImu) {
+                    document.getElementById('bed-weight').innerText = s.weightImu.loadWeightKg;
+                    document.getElementById('cradle-posture').innerText = s.weightImu.posture;
+                }
+
+                // 3. Audio CNN
+                if (s.audioCnn) {
+                    document.getElementById('cry-status').innerText = s.audioCnn.cryDetected ? 'CRY_DISTRESS' : 'NORMAL_QUIET';
+                    document.getElementById('decibels').innerText = s.audioCnn.decibels + ' dB';
+                }
+
+                // 4. MLX90640 Spatial Thermal Array
+                if (s.mlx90640) {
+                    document.getElementById('core-temp').innerText = s.mlx90640.coreTempC;
+                    document.getElementById('head-temp').innerText = s.mlx90640.headTempC;
+
+                    s.mlx90640.thermalMatrix.forEach((temp, idx) => {
+                        const pixel = document.getElementById(`pix-${idx}`);
+                        if (pixel) {
+                            if (temp > 36.0) {
+                                pixel.style.backgroundColor = '#f43f5e';
+                            } else if (temp > 30.0) {
+                                pixel.style.backgroundColor = '#fb923c';
+                            } else {
+                                pixel.style.backgroundColor = '#0284c7';
+                            }
+                        }
+                    });
+                }
+
+                // 5. Dual Gas Sensors
+                if (s.differentialHygiene) {
+                    document.getElementById('mattress-voc').innerText = s.differentialHygiene.mattressVocPpb + ' ppb';
+                    document.getElementById('ambient-voc').innerText = s.differentialHygiene.ambientRoomVocPpb + ' ppb';
+                    document.getElementById('delta-voc').innerText = s.differentialHygiene.deltaVocPpb + ' ppb';
+
+                    const matBarPct = Math.min(100, (s.differentialHygiene.mattressVocPpb / 300) * 100);
+                    const ambBarPct = Math.min(100, (s.differentialHygiene.ambientRoomVocPpb / 300) * 100);
+                    document.getElementById('mattress-voc-bar').style.width = matBarPct + '%';
+                    document.getElementById('ambient-voc-bar').style.width = ambBarPct + '%';
+                }
+
+                // 6. Incubator Climate
+                if (s.incubatorEnvironment) {
+                    document.getElementById('inc-temp').innerText = s.incubatorEnvironment.airTempC;
+                    document.getElementById('inc-hum').innerText = s.incubatorEnvironment.humidityPct;
+                }
+            }
+
+            if (packet.topic.includes('/alerts')) {
+                const alert = packet.data;
+                const feed = document.getElementById('alert-feed');
+                
+                if (feed.querySelector('.italic')) {
+                    feed.innerHTML = '';
+                }
+
+                const item = document.createElement('div');
+                item.className = `p-3 rounded-lg border text-xs ${
+                    alert.severity === 'CRITICAL' 
+                        ? 'bg-rose-500/20 border-rose-500/40 text-rose-200' 
+                        : alert.severity === 'HIGH'
+                        ? 'bg-amber-500/20 border-amber-500/40 text-amber-200'
+                        : 'bg-slate-800 border-slate-700 text-slate-300'
+                }`;
+                
+                item.innerHTML = `
+                    <div class="flex justify-between font-bold mb-1">
+                        <span>${alert.eventType}</span>
+                        <span class="font-mono text-[10px] text-slate-400">${new Date(alert.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <div class="text-[11px] font-mono text-slate-300">${JSON.stringify(alert.details)}</div>
+                `;
+                
+                feed.prepend(item);
+
+                if (feed.children.length > 6) {
+                    feed.removeChild(feed.lastChild);
+                }
+            }
+        };
+
+        setInterval(() => {
+            document.getElementById('clock').innerText = new Date().toISOString().substring(11, 19) + ' UTC';
+        }, 1000);
+    </script>
+</body>
+</html>
