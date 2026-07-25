@@ -3,231 +3,352 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NestGuard IoMT — Clinical NICU Monitoring Station</title>
+    <title>NestGuard Clinical NICU Central Monitoring Station</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #0b0f19; color: #e2e8f0; font-family: system-ui, sans-serif; margin: 0; padding: 24px; }
-        .card { background-color: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 20px; }
-        .grid-layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #1f2937; }
-        .val-large { font-size: 2.25rem; font-weight: 900; color: #ffffff; }
+        .thermal-grid-32x24 { 
+            display: grid; 
+            grid-template-columns: repeat(32, 1fr); 
+            gap: 1px; 
+            background-color: #020617;
+        }
+        .thermal-pixel { 
+            aspect-ratio: 1; 
+            border-radius: 1px; 
+            transition: background-color 0.2s ease; 
+        }
+        @keyframes pulse-wave {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+        .animate-wave { animation: pulse-wave 1.5s infinite ease-in-out; }
     </style>
 </head>
-<body>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
 
-    <!-- HEADER BAR -->
-    <header class="header">
-        <div style="display: flex; align-items: center; gap: 12px;">
-            <span style="background: #1e1b4b; color: #c7d2fe; font-size: 0.75rem; font-weight: bold; padding: 4px 12px; border-radius: 9999px;">NICU WARD A</span>
-            <h1 style="font-size: 1.5rem; font-weight: 800; margin: 0;">NestGuard IoMT <span style="color: #9ca3af; font-size: 1rem; font-weight: normal;">| Multi-Sensor Clinical Bed 04 Monitor</span></h1>
+    <!-- Hospital Header Bar -->
+    <header class="border-b border-slate-800 bg-slate-900/90 px-6 py-3 flex justify-between items-center sticky top-0 z-50 backdrop-blur">
+        <div class="flex items-center space-x-4">
+            <span class="px-2.5 py-1 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded font-mono text-xs font-bold">NICU WARD A</span>
+            <h1 class="text-lg font-bold tracking-wide text-white">NestGuard IoMT <span class="text-xs text-slate-400 font-normal">| Multi-Sensor Clinical Bed 04 Monitor</span></h1>
         </div>
-        <div style="display: flex; gap: 12px;">
-            <div id="status-indicator" style="background: #422006; color: #facc15; font-size: 0.75rem; font-weight: 600; padding: 6px 12px; border-radius: 6px; border: 1px solid #854d0e;">
-                <span id="status-text">Connecting to Gateway...</span>
-            </div>
-            <div id="alert-banner" style="display: none; background: #450a0a; color: #fca5a5; font-size: 0.75rem; font-weight: bold; padding: 6px 12px; border-radius: 6px; border: 1px solid #991b1b;">
-                ⚠️ <span id="alert-text">ALARM TRIGGERED</span>
-            </div>
+        <div class="flex items-center space-x-6">
+            <span id="connection-status" class="text-xs font-mono px-3 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full">Connecting Central Gateway...</span>
+            <span id="clock" class="text-sm font-mono text-slate-400">00:00:00 UTC</span>
         </div>
     </header>
 
-    <!-- METRICS GRID -->
-    <main class="grid-layout">
+    <!-- Main Clinical Grid Dashboard -->
+    <main class="p-6 max-w-[1600px] mx-auto space-y-6">
 
-        <!-- 1. MMWAVE RADAR -->
-        <div class="card">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-                <span style="font-size: 0.75rem; font-weight: bold; color: #22d3ee; text-transform: uppercase;">60GHz mmWave Radar</span>
-                <span style="font-size: 0.65rem; background: #083344; color: #67e8f9; padding: 2px 6px; border-radius: 4px; font-family: monospace;">BGT60TR13C</span>
+        <!-- TOP ROW: HIGH-PRIORITY VITAL SIGN TELEMETRY -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            <!-- Sensor 1: 60GHz mmWave Radar Vitals -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-lg">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-cyan-400 uppercase tracking-wider">60GHz mmWave Radar</span>
+                    <span class="text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-800 px-1.5 py-0.5 rounded">BGT60TR13C</span>
+                </div>
+                <div class="flex justify-between items-baseline mt-1">
+                    <div>
+                        <span class="text-xs text-slate-500 block">Respiration</span>
+                        <span id="resp-rate" class="text-3xl font-extrabold text-cyan-400">--</span>
+                        <span class="text-xs text-slate-400">BPM</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs text-slate-500 block">Movement Index</span>
+                        <span id="movement-idx" class="text-sm font-mono font-bold text-emerald-400">RESTING</span>
+                    </div>
+                </div>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
-                <span style="color: #9ca3af; font-size: 0.75rem;">Respiration</span>
-                <span id="rr-val" class="val-large">--</span>
-                <span style="font-size: 0.75rem; color: #6b7280; font-weight: bold;">BPM</span>
+
+            <!-- Sensor 2: PVDF Piezoelectric BCG Film Array -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-lg">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-rose-400 uppercase tracking-wider">PVDF Piezo Film (BCG)</span>
+                    <span class="text-[10px] font-mono bg-rose-950 text-rose-300 border border-rose-800 px-1.5 py-0.5 rounded">Contactless Pulse</span>
+                </div>
+                <div class="flex justify-between items-baseline mt-1">
+                    <div>
+                        <span class="text-xs text-slate-500 block">Heart Rate</span>
+                        <span id="heart-rate" class="text-3xl font-extrabold text-rose-400">--</span>
+                        <span class="text-xs text-slate-400">BPM</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs text-slate-500 block">Signal Quality</span>
+                        <span id="signal-q" class="text-sm font-mono text-emerald-400 font-bold">98%</span>
+                    </div>
+                </div>
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; padding-top: 8px; border-top: 1px solid #1f2937;">
-                <span style="color: #9ca3af;">Movement Index</span>
-                <span id="movement-val" style="font-weight: bold; color: #34d399;">RESTING</span>
+
+            <!-- Sensor 3: Load Cell & 6-Axis IMU Fusion -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-lg">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-purple-400 uppercase tracking-wider">HX711 Load Cell + MPU6050</span>
+                    <span class="text-[10px] font-mono bg-purple-950 text-purple-300 border border-purple-800 px-1.5 py-0.5 rounded">Kinematics</span>
+                </div>
+                <div class="flex justify-between items-baseline mt-1">
+                    <div>
+                        <span class="text-xs text-slate-500 block">Bed Weight</span>
+                        <span id="bed-weight" class="text-2xl font-bold text-purple-300">4.25</span>
+                        <span class="text-xs text-slate-400">kg</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs text-slate-500 block">Cradle Posture</span>
+                        <span id="cradle-posture" class="text-xs font-mono font-bold text-amber-400">SUPINE_BACK</span>
+                    </div>
+                </div>
             </div>
+
+            <!-- Sensor 4: INMP441 Acoustic Microphone (Edge AI CNN) -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-lg">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-amber-400 uppercase tracking-wider">INMP441 I2S Audio CNN</span>
+                    <span class="text-[10px] font-mono bg-amber-950 text-amber-300 border border-amber-800 px-1.5 py-0.5 rounded">Acoustic AI</span>
+                </div>
+                <div class="flex justify-between items-baseline mt-1">
+                    <div>
+                        <span class="text-xs text-slate-500 block">Cry Classification</span>
+                        <span id="cry-status" class="text-sm font-bold text-emerald-400">QUIET_NORMAL</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs text-slate-500 block">Sound Level</span>
+                        <span id="decibels" class="text-lg font-mono font-bold text-amber-300">42 dB</span>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
-        <!-- 2. PVDF PIEZO FILM -->
-        <div class="card">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-                <span style="font-size: 0.75rem; font-weight: bold; color: #fb7185; text-transform: uppercase;">PVDF Piezo Film (BCG)</span>
-                <span style="font-size: 0.65rem; background: #4c0519; color: #f43f5e; padding: 2px 6px; border-radius: 4px; font-family: monospace;">Contactless Pulse</span>
+        <!-- MIDDLE ROW: THERMAL MATRIX, DIFFERENTIAL GAS & ENVIRONMENT -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Sensor 5: MLX90640 Spatial Thermal Array (32x24 Matrix) -->
+            <div class="lg:col-span-2 bg-slate-900/90 border border-slate-800 rounded-xl p-5 shadow-lg">
+                <div class="flex justify-between items-center mb-3">
+                    <div>
+                        <h2 class="text-sm font-bold text-slate-200 uppercase tracking-wider">Melexis MLX90640-D55 Thermal Spatial Matrix</h2>
+                        <span class="text-xs text-slate-500">768 IR Thermal Infrared Zones ($32 \times 24$ Frame Rendering)</span>
+                    </div>
+                    <div class="flex space-x-4 text-xs font-mono">
+                        <div><span class="text-slate-500">Core Body:</span> <span id="core-temp" class="text-rose-400 font-bold">-- °C</span></div>
+                        <div><span class="text-slate-500">Head Zone:</span> <span id="head-temp" class="text-amber-400 font-bold">-- °C</span></div>
+                    </div>
+                </div>
+
+                <!-- 32x24 Grid Container -->
+                <div id="thermal-grid" class="thermal-grid-32x24 p-2 rounded-lg border border-slate-800 mb-3">
+                    <!-- 768 pixels generated dynamically -->
+                </div>
+
+                <div class="flex justify-between items-center text-xs text-slate-400 px-1">
+                    <span>Ambient Background (&lt;26°C)</span>
+                    <div class="h-2 w-48 rounded bg-gradient-to-r from-sky-500 via-amber-400 to-rose-500"></div>
+                    <span>Infant Core Temperature (&gt;36.5°C)</span>
+                </div>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
-                <span style="color: #9ca3af; font-size: 0.75rem;">Heart Rate</span>
-                <span id="hr-val" class="val-large">--</span>
-                <span style="font-size: 0.75rem; color: #6b7280; font-weight: bold;">BPM</span>
+
+            <!-- Sensor 6 & 7: Dual Gas Array + Incubator Environment -->
+            <div class="space-y-6">
+                
+                <!-- Sensor 6: ScioSense ENS160 Dual Gas Array -->
+                <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-5 shadow-lg space-y-4">
+                    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                        <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Dual ENS160 Gas Array</h3>
+                        <span class="text-[10px] font-mono text-cyan-400">Differential Air Check</span>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-400">Mattress Bed VOC:</span>
+                                <span id="mattress-voc" class="font-mono text-cyan-300">-- ppb</span>
+                            </div>
+                            <div class="w-full bg-slate-950 rounded-full h-2 border border-slate-800">
+                                <div id="mattress-voc-bar" class="bg-cyan-500 h-2 rounded-full" style="width: 30%"></div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-400">Ambient Nursery VOC:</span>
+                                <span id="ambient-voc" class="font-mono text-slate-400">-- ppb</span>
+                            </div>
+                            <div class="w-full bg-slate-950 rounded-full h-2 border border-slate-800">
+                                <div id="ambient-voc-bar" class="bg-slate-600 h-2 rounded-full" style="width: 25%"></div>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between items-center text-xs">
+                            <span class="text-slate-400">Hygiene Differential ($\Delta\text{VOC}$):</span>
+                            <span id="delta-voc" class="font-mono font-bold text-emerald-400">-- ppb</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sensor 7: AHT20 Incubator Climate Control -->
+                <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-5 shadow-lg space-y-3">
+                    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                        <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">AHT20 Incubator Climate</h3>
+                        <span class="text-[10px] font-mono text-emerald-400">$I^2C$ Loop Verified</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 text-center">
+                        <div class="bg-slate-950 p-3 rounded border border-slate-800">
+                            <span class="text-[10px] text-slate-500 block">Air Temp</span>
+                            <span id="inc-temp" class="text-xl font-bold text-slate-200">31.5</span>
+                            <span class="text-xs text-slate-400">°C</span>
+                        </div>
+                        <div class="bg-slate-950 p-3 rounded border border-slate-800">
+                            <span class="text-[10px] text-slate-500 block">Humidity</span>
+                            <span id="inc-hum" class="text-xl font-bold text-slate-200">55.0</span>
+                            <span class="text-xs text-slate-400">% RH</span>
+                        </div>
+                    </div>
+                </div>
+
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; padding-top: 8px; border-top: 1px solid #1f2937;">
-                <span style="color: #9ca3af;">Signal Quality</span>
-                <span style="font-weight: bold; color: #34d399;">98%</span>
-            </div>
+
         </div>
 
-        <!-- 3. CLIMATE OVERVIEW -->
-        <div class="card">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-                <span style="font-size: 0.75rem; font-weight: bold; color: #fbbf24; text-transform: uppercase;">Incubator Climate</span>
-                <span style="font-size: 0.65rem; background: #451a03; color: #fde047; padding: 2px 6px; border-radius: 4px; font-family: monospace;">AHT20</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
-                <span style="color: #9ca3af; font-size: 0.75rem;">Core Temp</span>
-                <span id="core-temp-val" style="font-size: 1.5rem; font-weight: bold; color: #ffffff;">--</span>
-                <span style="font-size: 0.75rem; color: #6b7280; font-weight: bold;">°C</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                <span style="color: #9ca3af; font-size: 0.75rem;">Incubator Humidity</span>
-                <span id="humidity-val" style="font-size: 1.125rem; font-weight: bold; color: #d1d5db;">--</span>
-                <span style="font-size: 0.75rem; color: #6b7280; font-weight: bold;">%</span>
-            </div>
-        </div>
-
-        <!-- 4. ACOUSTIC & GAS -->
-        <div class="card">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-                <span style="font-size: 0.75rem; font-weight: bold; color: #c084fc; text-transform: uppercase;">Acoustic & Air Quality</span>
-                <span style="font-size: 0.65rem; background: #3b0764; color: #e9d5ff; padding: 2px 6px; border-radius: 4px; font-family: monospace;">INMP441 / ENS160</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
-                <span style="color: #9ca3af; font-size: 0.75rem;">Noise Level</span>
-                <span id="audio-val" style="font-size: 1.25rem; font-weight: bold; color: #ffffff;">--</span>
-                <span style="font-size: 0.75rem; color: #6b7280; font-weight: bold;">dB</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; padding-top: 8px; border-top: 1px solid #1f2937;">
-                <span style="color: #9ca3af;">Differential VOC</span>
-                <span id="voc-val" style="font-weight: bold; color: #34d399;">-- ΔVOC</span>
+        <!-- BOTTOM ROW: MULTI-MODAL NURSE STATION EVENT LOG -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-5 shadow-lg">
+            <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Live Multi-Sensor Nurse Station Alarm Stream</h2>
+            <div id="alert-feed" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-48 overflow-y-auto pr-1">
+                <div class="text-xs text-slate-500 italic col-span-full">Awaiting real-time telemetry events...</div>
             </div>
         </div>
 
     </main>
 
-    <!-- THERMAL MATRIX SECTION -->
-    <section class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <div>
-                <h2 style="font-size: 0.875rem; font-weight: bold; text-transform: uppercase; margin: 0; color: #ffffff;">Melexis MLX90640-D55 Thermal Spatial Matrix</h2>
-                <p style="font-size: 0.75rem; color: #9ca3af; margin: 4px 0 0 0;">768 IR Thermal Infrared Zones (32 x 24 Frame Rendering)</p>
-            </div>
-        </div>
-        
-        <div style="display: flex; justify-content: center; background: #030712; padding: 12px; border-radius: 8px; border: 1px solid #1f2937;">
-            <canvas id="thermalCanvas" width="640" height="480" style="width: 100%; max-width: 640px; border-radius: 4px;"></canvas>
-        </div>
-    </section>
-
-    <!-- WEBSOCKET SCRIPT -->
+    <!-- Client WebSockets Execution -->
     <script>
-        const canvas = document.getElementById('thermalCanvas');
-        const ctx = canvas.getContext('2d');
-        const cols = 32, rows = 24;
-        const cellWidth = canvas.width / cols;
-        const cellHeight = canvas.height / rows;
-
-        // Dynamic WebSocket protocol
+        // Auto-detect environment protocol (ws:// or wss://)
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}`;
-        console.log('[WEBSOCKET] Connecting to:', wsUrl);
-
         const ws = new WebSocket(wsUrl);
 
+        const statusEl = document.getElementById('connection-status');
+
+        // Render 32x24 (768 pixels) Thermal Array
+        const gridEl = document.getElementById('thermal-grid');
+        for (let i = 0; i < 768; i++) {
+            const pixel = document.createElement('div');
+            pixel.className = 'thermal-pixel bg-slate-800';
+            pixel.id = `pix-${i}`;
+            gridEl.appendChild(pixel);
+        }
+
         ws.onopen = () => {
-            console.log('[WEBSOCKET] Connected');
-            document.getElementById('status-indicator').style.background = '#064e3b';
-            document.getElementById('status-indicator').style.color = '#34d399';
-            document.getElementById('status-indicator').style.borderColor = '#047857';
-            document.getElementById('status-text').innerText = "Live Telemetry Active";
+            statusEl.innerText = 'Central Gateway Connected';
+            statusEl.className = 'text-xs font-mono px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full';
         };
 
         ws.onclose = () => {
-            console.warn('[WEBSOCKET] Disconnected');
-            document.getElementById('status-indicator').style.background = '#450a0a';
-            document.getElementById('status-indicator').style.color = '#fca5a5';
-            document.getElementById('status-indicator').style.borderColor = '#991b1b';
-            document.getElementById('status-text').innerText = "Gateway Disconnected";
+            statusEl.innerText = 'Gateway Disconnected';
+            statusEl.className = 'text-xs font-mono px-3 py-1 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-full';
         };
 
         ws.onmessage = (event) => {
-            try {
-                const raw = JSON.parse(event.data);
+            const packet = JSON.parse(event.data);
+
+            if (packet.topic.includes('/telemetry')) {
+                const s = packet.data.sensors;
+
+                // 1. mmWave Radar
+                if (s.clinicalVitals) {
+                    document.getElementById('resp-rate').innerText = s.clinicalVitals.respirationBpm;
+                    document.getElementById('movement-idx').innerText = s.clinicalVitals.movementIndex;
+                    document.getElementById('heart-rate').innerText = s.clinicalVitals.heartRateBpm;
+                    document.getElementById('signal-q').innerText = s.clinicalVitals.ballistoCardiogramQuality;
+                }
+
+                // 2. Load Cells & IMU
+                if (s.weightImu) {
+                    document.getElementById('bed-weight').innerText = s.weightImu.loadWeightKg;
+                    document.getElementById('cradle-posture').innerText = s.weightImu.posture;
+                }
+
+                // 3. Audio CNN
+                if (s.audioCnn) {
+                    document.getElementById('cry-status').innerText = s.audioCnn.cryDetected ? 'CRY_DISTRESS' : 'NORMAL_QUIET';
+                    document.getElementById('decibels').innerText = s.audioCnn.decibels + ' dB';
+                }
+
+                // 4. MLX90640 Spatial Thermal Array
+                if (s.mlx90640) {
+                    document.getElementById('core-temp').innerText = s.mlx90640.coreTempC;
+                    document.getElementById('head-temp').innerText = s.mlx90640.headTempC;
+
+                    s.mlx90640.thermalMatrix.forEach((temp, idx) => {
+                        const pixel = document.getElementById(`pix-${idx}`);
+                        if (pixel) {
+                            if (temp > 36.0) {
+                                pixel.style.backgroundColor = '#f43f5e';
+                            } else if (temp > 30.0) {
+                                pixel.style.backgroundColor = '#fb923c';
+                            } else {
+                                pixel.style.backgroundColor = '#0284c7';
+                            }
+                        }
+                    });
+                }
+
+                // 5. Dual Gas Sensors
+                if (s.differentialHygiene) {
+                    document.getElementById('mattress-voc').innerText = s.differentialHygiene.mattressVocPpb + ' ppb';
+                    document.getElementById('ambient-voc').innerText = s.differentialHygiene.ambientRoomVocPpb + ' ppb';
+                    document.getElementById('delta-voc').innerText = s.differentialHygiene.deltaVocPpb + ' ppb';
+
+                    const matBarPct = Math.min(100, (s.differentialHygiene.mattressVocPpb / 300) * 100);
+                    const ambBarPct = Math.min(100, (s.differentialHygiene.ambientRoomVocPpb / 300) * 100);
+                    document.getElementById('mattress-voc-bar').style.width = matBarPct + '%';
+                    document.getElementById('ambient-voc-bar').style.width = ambBarPct + '%';
+                }
+
+                // 6. Incubator Climate
+                if (s.incubatorEnvironment) {
+                    document.getElementById('inc-temp').innerText = s.incubatorEnvironment.airTempC;
+                    document.getElementById('inc-hum').innerText = s.incubatorEnvironment.humidityPct;
+                }
+            }
+
+            if (packet.topic.includes('/alerts')) {
+                const alert = packet.data;
+                const feed = document.getElementById('alert-feed');
                 
-                // Unwrap payload if nested under 'payload'
-                const data = raw.payload ? raw.payload : raw;
-
-                if (data.type === 'SYSTEM_STATUS') return;
-
-                // Value mapping with key fallbacks
-                const hr = data.hr || data.heart_rate || data.pulse;
-                const rr = data.rr || data.respiration || data.respiration_rate;
-                const coreTemp = data.core_temp || data.coreTemp || data.temperature;
-                const humidity = data.incubator_humidity || data.humidity || data.hum;
-                const audioDb = data.audio_db || data.sound_level || data.decibels;
-                const deltaVoc = data.delta_voc || (data.bed_voc && data.room_voc ? data.bed_voc - data.room_voc : null);
-                const isMoving = data.bed_movement !== undefined ? data.bed_movement : data.movement;
-
-                // Inject into DOM
-                if (hr !== undefined) document.getElementById('hr-val').innerText = hr;
-                if (rr !== undefined) document.getElementById('rr-val').innerText = rr;
-                if (coreTemp !== undefined) document.getElementById('core-temp-val').innerText = typeof coreTemp === 'number' ? coreTemp.toFixed(1) : coreTemp;
-                if (humidity !== undefined) document.getElementById('humidity-val').innerText = typeof humidity === 'number' ? humidity.toFixed(0) : humidity;
-                if (audioDb !== undefined) document.getElementById('audio-val').innerText = typeof audioDb === 'number' ? audioDb.toFixed(0) : audioDb;
-                if (deltaVoc !== null && deltaVoc !== undefined) document.getElementById('voc-val').innerText = `${deltaVoc} ΔVOC`;
-
-                if (isMoving !== undefined) {
-                    const moveElem = document.getElementById('movement-val');
-                    moveElem.innerText = isMoving ? "ACTIVE MOVEMENT" : "RESTING";
-                    moveElem.style.color = isMoving ? "#f59e0b" : "#34d399";
+                if (feed.querySelector('.italic')) {
+                    feed.innerHTML = '';
                 }
 
-                // Render thermal grid
-                const frame = data.thermal_matrix || data.thermal_frame || data.matrix;
-                if (frame && Array.isArray(frame)) {
-                    drawThermalGrid(frame);
-                } else {
-                    drawSyntheticThermalGrid(coreTemp || 36.8);
-                }
+                const item = document.createElement('div');
+                item.className = `p-3 rounded-lg border text-xs ${
+                    alert.severity === 'CRITICAL' 
+                        ? 'bg-rose-500/20 border-rose-500/40 text-rose-200' 
+                        : alert.severity === 'HIGH'
+                        ? 'bg-amber-500/20 border-amber-500/40 text-amber-200'
+                        : 'bg-slate-800 border-slate-700 text-slate-300'
+                }`;
+                
+                item.innerHTML = `
+                    <div class="flex justify-between font-bold mb-1">
+                        <span>${alert.eventType}</span>
+                        <span class="font-mono text-[10px] text-slate-400">${new Date(alert.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <div class="text-[11px] font-mono text-slate-300">${JSON.stringify(alert.details)}</div>
+                `;
+                
+                feed.prepend(item);
 
-            } catch (err) {
-                console.error('[WEBSOCKET PARSE ERROR]', err);
+                if (feed.children.length > 6) {
+                    feed.removeChild(feed.lastChild);
+                }
             }
         };
 
-        function getThermalColor(temp) {
-            if (temp < 33) return '#1e3a8a';
-            if (temp < 35) return '#0284c7';
-            if (temp < 36.2) return '#10b981';
-            if (temp < 37.3) return '#f59e0b';
-            return '#dc2626';
-        }
-
-        function drawThermalGrid(frame) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            for (let r = 0; r < rows; r++) {
-                for (let c = 0; c < cols; c++) {
-                    const temp = frame[r * cols + c] || 32.0;
-                    ctx.fillStyle = getThermalColor(temp);
-                    ctx.fillRect(c * cellWidth, r * cellHeight, cellWidth - 0.5, cellHeight - 0.5);
-                }
-            }
-        }
-
-        function drawSyntheticThermalGrid(centerTemp) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            for (let r = 0; r < rows; r++) {
-                for (let c = 0; c < cols; c++) {
-                    const dist = Math.sqrt(Math.pow(r - 12, 2) + Math.pow(c - 16, 2));
-                    let temp = 25.0;
-                    if (dist < 6) temp = centerTemp - (dist * 0.4);
-                    ctx.fillStyle = getThermalColor(temp);
-                    ctx.fillRect(c * cellWidth, r * cellHeight, cellWidth - 0.5, cellHeight - 0.5);
-                }
-            }
-        }
-
-        drawSyntheticThermalGrid(36.5);
+        setInterval(() => {
+            document.getElementById('clock').innerText = new Date().toISOString().substring(11, 19) + ' UTC';
+        }, 1000);
     </script>
 </body>
 </html>
