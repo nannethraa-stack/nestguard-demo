@@ -9,12 +9,12 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 
 // 1. AUTO-SPAWN HARDWARE SIMULATOR (FOR CLOUD DEPLOYMENTS)
-// Automatically launches hospital_stub.js in a child process on Render
+// Spawns hospital_stub.js as a child process on Render so telemetry streams 24/7
 try {
     const simulatorPath = path.join(__dirname, 'hospital_stub.js');
     console.log(`[SYSTEM] Auto-starting hardware simulator background process: ${simulatorPath}`);
     
-    // stdio: 'inherit' routes stub console.logs directly to Render terminal logs
+    // stdio: 'inherit' routes stub console output directly to Render deployment logs
     const simulator = fork(simulatorPath, [], { stdio: 'inherit' });
 
     simulator.on('exit', (code, signal) => {
@@ -53,7 +53,7 @@ wss.on('connection', (ws) => {
     });
 });
 
-// Broadcast helper to stream payloads to all connected browser clients
+// Broadcast helper to stream JSON payloads to all connected browser clients
 function broadcastTelemetry(data) {
     wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
@@ -64,8 +64,8 @@ function broadcastTelemetry(data) {
 
 // 4. MQTT CLIENT (CONNECTED TO HIVEMQ BROKER)
 const MQTT_BROKER = 'mqtt://broker.hivemq.com:1883';
-// Use '#' wildcard so it catches 'bed_04', 'bed04', or any other subtopic format
-const MQTT_TOPIC = 'nestguard/nicu/#';
+// Subscribes to ALL subtopics under nestguard to ensure bed_04, bed04, etc. are captured
+const MQTT_TOPIC = 'nestguard/#';
 
 console.log(`[MQTT] Connecting to broker at ${MQTT_BROKER}...`);
 const mqttClient = mqtt.connect(MQTT_BROKER);
@@ -86,13 +86,13 @@ mqttClient.on('message', (topic, message) => {
         const rawString = message.toString();
         const payload = JSON.parse(rawString);
         
-        // Extract vital signals with flexible key fallbacks
+        // Extract vital signals with flexible key fallbacks for logging
         const hr = payload.hr || payload.heart_rate || payload.pulse || 'N/A';
         const coreTemp = payload.core_temp || payload.coreTemp || 'N/A';
         
         console.log(`[MQTT RELAY] Topic: ${topic} | HR: ${hr} | Core Temp: ${coreTemp}°C`);
         
-        // Stream data payload to all connected frontend dashboards
+        // Stream data payload directly to connected frontend dashboards
         broadcastTelemetry(payload);
     } catch (err) {
         console.error('[MQTT PARSE ERROR] Invalid JSON received:', message.toString());
