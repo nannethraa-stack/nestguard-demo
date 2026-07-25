@@ -1,65 +1,103 @@
-/**
- * NestGuard Hospital Gateway
- * Serves static web UI and bridges MQTT topics to WebSockets
- */
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const mqtt = require('mqtt');
-const cors = require('cors');
 const path = require('path');
-
-const APP_PORT = 8080;
-const BROKER_URL = 'mqtt://broker.hivemq.com:1883';
+const { fork } = require('child_process');
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+const PORT = process.env.PORT || 8080;
 
-// Serve static assets from the root directory
-app.use(express.static(__dirname));
+// 1. AUTO-SPAWN HARDWARE SIMULATOR (FOR CLOUD DEPLOYMENTS)
+// Spawns hospital_stub.js as a background process on Render so data streams 24/7
+try {
+    const simulatorPath = path.join(__dirname, 'hospital_stub.js');
+    console.log(`[SYSTEM] Auto-starting hardware simulator background process: ${simulatorPath}`);
+    const simulator = fork(simulatorPath);
+    
+    simulator.on('error', (err) => {
+        console.error('[SIMULATOR ERROR]', err);
+    });
+} catch (err) {
+    console.warn('[SYSTEM] Could not auto-start hospital_stub.js:', err.message);
+}
+
+// 2. EXPRESS HTTP SERVER & STATIC FILE HOSTING
+app.use(express.static(path.join(__dirname)));
+
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'active', system: 'NestGuard IoMT Gateway', timestamp: new Date().toISOString() });
+});
 
 const server = http.createServer(app);
+
+// 3. WEBSOCKET SERVER FOR DASHBOARD CLIENTS
 const wss = new WebSocket.Server({ server });
 
-const mqttClient = mqtt.connect(BROKER_URL);
-const alertHistory = [];
+wss.on('connection', (ws) => {
+    console.log('[WEBSOCKET] Web dashboard client connected');
+    
+    ws.send(JSON.stringify({
+        type: 'SYSTEM_STATUS',
+        message: 'Connected to NestGuard IoMT Telemetry Gateway'
+    }));
+
+    ws.on('close', () => {
+        console.log('[WEBSOCKET] Web dashboard client disconnected');
+    });
+});
+
+// Broadcast helper to stream MQTT payloads to all connected browser clients
+function broadcastTelemetry(data) {
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(data));
+        }
+    });
+}
+
+// 4. MQTT CLIENT (CONNECTED TO HIVEMQ BROKER)
+const MQTT_BROKER = 'mqtt://broker.hivemq.com:1883';
+const MQTT_TOPIC = 'nestguard/nicu/+/telemetry';
+
+console.log(`[MQTT] Connecting to broker at ${MQTT_BROKER}...`);
+const mqttClient = mqtt.connect(MQTT_BROKER);
 
 mqttClient.on('connect', () => {
-    console.log('[CLINICAL BACKEND] Connected to Central MQTT Broker.');
-    mqttClient.subscribe('nestguard/hospital/+/+/telemetry');
-    mqttClient.subscribe('nestguard/hospital/+/+/alerts');
+    console.log('[MQTT] Connected to HiveMQ Broker successfully');
+    mqttClient.subscribe(MQTT_TOPIC, (err) => {
+        if (!err) {
+            console.log(`[MQTT] Subscribed to topic pattern: ${MQTT_TOPIC}`);
+        } else {
+            console.error('[MQTT] Subscription error:', err);
+        }
+    });
 });
 
 mqttClient.on('message', (topic, message) => {
     try {
-        const parsed = JSON.parse(message.toString());
-        const wsPacket = JSON.stringify({ topic, data: parsed });
-
-        if (topic.includes('/alerts')) {
-            alertHistory.unshift(parsed);
-            if (alertHistory.length > 100) alertHistory.pop();
-        }
-
-        wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(wsPacket);
-            }
+        const payload = JSON.parse(message.toString());
+        console.log(`[MQTT TELEMETRY] Topic: ${topic} | HR: ${payload.hr || 'N/A'} | Core Temp: ${payload.core_temp || 'N/A'}°C`);
+        
+        // Relay real-time telemetry to connected dashboard screens
+        broadcastTelemetry({
+            topic: topic,
+            payload: payload,
+            receivedAt: new Date().toISOString()
         });
-    } catch (e) {
-        console.error('[CLINICAL BACKEND] Parse Error:', e.message);
+    } catch (err) {
+        console.error('[MQTT PARSE ERROR] Invalid JSON received:', message.toString());
     }
 });
 
-// Serve index.html on root request
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+mqttClient.on('error', (err) => {
+    console.error('[MQTT ERROR]', err);
 });
 
-app.get('/api/v1/clinical/alerts', (req, res) => {
-    res.json({ total: alertHistory.length, alerts: alertHistory });
-});
-
-server.listen(APP_PORT, () => {
-    console.log(`[CLINICAL BACKEND] Server running on http://localhost:${APP_PORT}`);
+// 5. START GATEWAY SERVER
+server.listen(PORT, () => {
+    console.log(`\n==================================================`);
+    console.log(`🚀 NestGuard IoMT Server running on port ${PORT}`);
+    console.log(`🌐 Local Web Dashboard: http://localhost:${PORT}`);
+    console.log(`==================================================\n`);
 });
